@@ -10,10 +10,15 @@ FROM python:3.9-slim
 
 WORKDIR /app
 COPY --from=builder /usr/local /usr/local
-COPY . .
+COPY app.py .
+COPY lib ./lib
+COPY static ./static
+COPY templates ./templates
+COPY requirements.txt .
 
 ENV PORT=5000
+ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn --pythonpath /app --bind 0.0.0.0:$PORT app:app"] 
+CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:5000", "app:app"] 
