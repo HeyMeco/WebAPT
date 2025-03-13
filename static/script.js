@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let releaseInfo = null;
     let packagesUrl = '';
     let packages = [];
+    let totalUniquePackages = 0; // Keep track of total unique packages
+    let totalPackageVersions = 0; // Keep track of total package versions
     let currentPage = 1;
     let pageSize = 20;
     let searchQuery = '';
@@ -257,6 +259,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Parse the Packages file content
             packages = parsePackages(packagesContent);
             
+            // Update total package counts when packages are first loaded
+            const uniquePackageNames = new Set(packages.map(pkg => pkg.name));
+            totalUniquePackages = uniquePackageNames.size;
+            totalPackageVersions = packages.length;
+            
             // Show packages table
             showPackagesTable();
         } catch (error) {
@@ -459,16 +466,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tableContainerDiv.style.display = 'none';
             return;
         }
-
-        // Get the unique package count
-        const filteredPackages = getFilteredPackages();
-        const uniquePackageNames = new Set(filteredPackages.map(pkg => pkg.name));
         
-        // Update the package count
-        packageCountDiv.textContent = `Found ${uniquePackageNames.size} packages (${filteredPackages.length} versions total)`;
-        packageCountDiv.style.display = 'block';
-        
-        // Render the table
+        // Render the table (which now updates the package count)
         renderTable();
         
         // Show the table container
@@ -495,6 +494,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Sort the grouped packages
         groupedPackages.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Update package count display to reflect current filtered results versus total
+        const foundUniquePackages = Object.keys(packageGroups).length;
+        const foundVersions = filteredPackages.length;
+        
+        if (searchQuery) {
+            packageCountDiv.textContent = `Found ${foundUniquePackages} of ${totalUniquePackages} packages`;
+        } else {
+            packageCountDiv.textContent = `Found ${foundUniquePackages} packages (${foundVersions} versions total)`;
+        }
+        
+        packageCountDiv.style.display = 'block';
         
         // Update pagination with the new count
         const totalPages = Math.max(1, Math.ceil(groupedPackages.length / pageSize));
@@ -774,6 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
         releaseInfo = null;
         packagesUrl = '';
         packages = [];
+        totalUniquePackages = 0;
+        totalPackageVersions = 0;
         currentPage = 1;
         pageInput.value = 1;
         searchQuery = '';
