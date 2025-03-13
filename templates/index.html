@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAPT</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>WebAPT</h1>
+        
+        <div class="search-box">
+            <div class="input-group">
+                <input 
+                    id="repoUrl" 
+                    type="text" 
+                    placeholder="Enter APT repository base URL (e.g., https://apt.armbian.com/dists/noble)"
+                >
+                <button id="loadButton">Load Repository</button>
+            </div>
+
+            <div id="releaseInfo" class="release-info" style="display: none;">
+                <h2>Repository Information</h2>
+                <div class="info-grid" id="infoGrid"></div>
+
+                <div class="selectors">
+                    <select id="archSelect">
+                        <option value="">Select Architecture</option>
+                    </select>
+                    <select id="componentSelect">
+                        <option value="">Select Component</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="packagesUrl" class="packages-url" style="display: none;"></div>
+        </div>
+
+        <div id="errorMessage" class="error" style="display: none;"></div>
+
+        <div id="packageCount" class="package-count-container" style="display: none;"></div>
+
+        <div id="tableContainer" class="table-container" style="display: none;">
+            <div class="search-and-pagination">
+                <div class="search-section">
+                    <div class="search-input-wrapper">
+                        <input
+                            id="searchQuery"
+                            type="text"
+                            placeholder="Search packages..."
+                            class="search-input"
+                        />
+                    </div>
+                </div>
+
+                <div class="pagination">
+                    <button id="firstPageBtn" class="pagination-button">First</button>
+                    <button id="prevPageBtn" class="pagination-button">Previous</button>
+                    <div class="page-input">
+                        <span>Page</span>
+                        <input type="number" id="pageInput" min="1" value="1">
+                        <span>of <span id="totalPages">1</span></span>
+                    </div>
+                    <button id="nextPageBtn" class="pagination-button">Next</button>
+                    <button id="lastPageBtn" class="pagination-button">Last</button>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Package</th>
+                        <th>Version</th>
+                        <th>Download</th>
+                    </tr>
+                </thead>
+                <tbody id="packagesTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html> 
