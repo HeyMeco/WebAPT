@@ -1,6 +1,7 @@
-FROM ghcr.io/astral-sh/uv:alpine as builder
+FROM python:3.9-slim as builder
 
 WORKDIR /app
+RUN pip install uv
 COPY requirements.txt .
 RUN uv pip compile requirements.txt -o requirements.lock
 RUN uv pip install --no-cache -r requirements.txt --system
