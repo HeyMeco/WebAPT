@@ -3,10 +3,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const repoUrlInput = document.getElementById('repoUrl');
     const loadButton = document.getElementById('loadButton');
+    const appTitle = document.querySelector('h1');
     const releaseInfoDiv = document.getElementById('releaseInfo');
     const infoGridDiv = document.getElementById('infoGrid');
     const archSelect = document.getElementById('archSelect');
     const componentSelect = document.getElementById('componentSelect');
+    const distSelect = document.getElementById('distSelect');
     const packagesUrlDiv = document.getElementById('packagesUrl');
     const errorMessageDiv = document.getElementById('errorMessage');
     const packageCountDiv = document.getElementById('packageCount');
@@ -30,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let sortField = 'name';
     let sortDirection = 'asc';
     let repoBaseUrl = '';
+    let availableDists = [];
+    let defaultDist = 'stable';
 
     // Proxy URL
     const PROXY_URL = '/proxy?url=';
@@ -42,9 +46,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadButton.addEventListener('click', fetchRelease);
+    
+    // Add click handler to the app title to reset the application
+    appTitle.addEventListener('click', () => {
+        resetState();
+        repoUrlInput.value = '';
+    });
+    
+    // Add CSS class for clickable title instead of setting the style directly
+    appTitle.classList.add('clickable-title');
 
     archSelect.addEventListener('change', updatePackagesUrl);
     componentSelect.addEventListener('change', updatePackagesUrl);
+    distSelect.addEventListener('change', handleDistChange);
+    distSelect.addEventListener('change', updatePackagesUrl);
 
     searchQueryInput.addEventListener('input', (e) => {
         searchQuery = e.target.value.toLowerCase();
@@ -93,14 +108,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Functions
     async function fetchRelease() {
-        const repoUrl = repoUrlInput.value.trim();
+        let repoUrl = repoUrlInput.value.trim();
         
+        // Use default URL if input is empty
         if (!repoUrl) {
-            showError('Please enter a repository URL');
-            return;
+            repoUrl = 'https://apt.armbian.com';
+            repoUrlInput.value = repoUrl;
         }
 
         try {
+            // Reset all state and selections before loading a new repository
+            resetState();
+            
             showLoading(true);
             clearError();
             hidePackagesInfo();
@@ -111,6 +130,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 repoBaseUrl = cleanBaseUrl.split('/dists/')[0];
             } else {
                 repoBaseUrl = cleanBaseUrl;
+            }
+
+            // Try to extract the distribution from the URL
+            let initialDist = defaultDist;
+            if (cleanBaseUrl.includes('/dists/')) {
+                const [_, distsPath] = cleanBaseUrl.split('/dists/');
+                if (distsPath && distsPath.trim() !== '') {
+                    initialDist = distsPath.split('/')[0];
+                }
             }
 
             // Build the Release file URL - handle different URL patterns
@@ -127,10 +155,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     releaseUrl = `${cleanBaseUrl}/Release`;  
                 } else {
                     // URL just ends with dists/
-                    releaseUrl = `${basePart}/dists/stable/Release`;
+                    releaseUrl = `${basePart}/dists/${initialDist}/Release`;
                 }
             } else {
-                releaseUrl = `${cleanBaseUrl}/dists/stable/Release`;
+                releaseUrl = `${cleanBaseUrl}/dists/${initialDist}/Release`;
             }
             
             // Fetch the Release file through the proxy
@@ -143,6 +171,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Parse the Release file content
             releaseInfo = parseReleaseFile(releaseContent);
+            
+            // Check for Suite and Codename to determine available distributions
+            availableDists = [];
+            if (releaseInfo.Suite) availableDists.push(releaseInfo.Suite);
+            if (releaseInfo.Codename && releaseInfo.Codename !== releaseInfo.Suite) availableDists.push(releaseInfo.Codename);
+            
+            // Fetch dists directory to discover available distributions
+            try {
+                await fetchAvailableDists();
+            } catch (e) {
+                console.warn("Could not fetch available distributions:", e);
+            }
+            
+            // Add the initial dist if not already in the list
+            if (!availableDists.includes(initialDist)) {
+                availableDists.push(initialDist);
+            }
             
             // Show release info
             showReleaseInfo();
@@ -186,8 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updatePackagesUrl() {
         const arch = archSelect.value;
         const component = componentSelect.value;
+        const dist = distSelect.value;
         
-        if (!arch || !component || !releaseInfo || !releaseInfo.Codename) {
+        if (!arch || !component || !dist || !releaseInfo) {
             packagesUrl = '';
             packagesUrlDiv.style.display = 'none';
             return;
@@ -196,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Build the Packages URL
         packagesUrl = buildPackagesUrl(
             repoUrlInput.value.trim(),
-            releaseInfo.Codename,
+            dist,
             component,
             arch
         );
@@ -209,7 +255,98 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchPackages();
     }
 
-    function showReleaseInfo() {
+    async function fetchAvailableDists() {
+        if (!repoBaseUrl) return;
+        
+        // Try to fetch the /dists/ directory to discover available distributions
+        // This may not work on all repositories as they might not allow directory listings
+        try {
+            const distsUrl = `${repoBaseUrl}/dists/`;
+            const response = await fetch(PROXY_URL + encodeURIComponent(distsUrl));
+            const content = await response.text();
+            
+            // Simple regex to find directory names
+            // This is a basic approach and might not work for all server configurations
+            const dirRegex = /<a[^>]*href="([^"\/]+)\/"[^>]*>/g;
+            let match;
+            
+            while ((match = dirRegex.exec(content)) !== null) {
+                const dist = match[1];
+                if (!availableDists.includes(dist) && dist !== '.' && dist !== '..') {
+                    availableDists.push(dist);
+                }
+            }
+        } catch (error) {
+            console.warn("Failed to fetch distributions from directory listing", error);
+        }
+    }
+
+    async function handleDistChange() {
+        const dist = distSelect.value;
+        
+        if (!dist || !repoBaseUrl) {
+            return;
+        }
+
+        try {
+            showLoading(true);
+            clearError();
+            
+            // Reset package-related UI elements
+            packagesUrl = '';
+            packagesUrlDiv.style.display = 'none';
+            packageCountDiv.style.display = 'none';
+            tableContainerDiv.style.display = 'none';
+            
+            // Reset architecture and component selections before fetching new data
+            archSelect.innerHTML = '<option value="">Select Architecture</option>';
+            componentSelect.innerHTML = '<option value="">Select Component</option>';
+            
+            // Build the Release file URL for the selected distribution
+            const releaseUrl = `${repoBaseUrl}/dists/${dist}/Release`;
+            
+            // Fetch the Release file through the proxy
+            const response = await fetch(PROXY_URL + encodeURIComponent(releaseUrl));
+            const releaseContent = await response.text();
+
+            if (response.status !== 200) {
+                throw new Error(`Failed to fetch Release file for ${dist}: ${response.statusText}`);
+            }
+
+            // Parse the Release file content
+            releaseInfo = parseReleaseFile(releaseContent);
+            
+            // Populate architecture dropdown
+            if (releaseInfo.Architectures) {
+                releaseInfo.Architectures.forEach(arch => {
+                    const option = document.createElement('option');
+                    option.value = arch;
+                    option.textContent = arch;
+                    archSelect.appendChild(option);
+                });
+            }
+            
+            // Populate component dropdown
+            if (releaseInfo.Components) {
+                releaseInfo.Components.forEach(component => {
+                    const option = document.createElement('option');
+                    option.value = component;
+                    option.textContent = component;
+                    componentSelect.appendChild(option);
+                });
+            }
+            
+            // Update info grid with the new release info
+            updateReleaseInfoGrid();
+            
+        } catch (error) {
+            showError(`Error loading distribution: ${error.message}`);
+        } finally {
+            showLoading(false);
+        }
+    }
+    
+    function updateReleaseInfoGrid() {
         if (!releaseInfo) return;
 
         // Clear the info grid
@@ -230,6 +367,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 infoGridDiv.appendChild(div);
             }
         });
+    }
+    
+    function showReleaseInfo() {
+        if (!releaseInfo) return;
+
+        // Update info grid
+        updateReleaseInfoGrid();
 
         // Populate architecture dropdown
         archSelect.innerHTML = '<option value="">Select Architecture</option>';
@@ -252,6 +396,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 componentSelect.appendChild(option);
             });
         }
+        
+        // Populate distribution dropdown
+        distSelect.innerHTML = '<option value="">Select Distribution</option>';
+        availableDists.sort().forEach(dist => {
+            const option = document.createElement('option');
+            option.value = dist;
+            option.textContent = dist;
+            // Set the active distribution based on Codename or selected value
+            if ((releaseInfo.Codename && dist === releaseInfo.Codename) || 
+                 distSelect.value === dist) {
+                option.selected = true;
+            }
+            distSelect.appendChild(option);
+        });
 
         // Show the release info section
         releaseInfoDiv.style.display = 'block';
@@ -466,9 +624,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function hidePackagesInfo() {
+        // Hide UI elements
         packagesUrlDiv.style.display = 'none';
         packageCountDiv.style.display = 'none';
         tableContainerDiv.style.display = 'none';
+        
+        // Clear packages data
+        packages = [];
+        packagesTable.innerHTML = '';
+        packagesUrl = '';
     }
 
     // Helper functions for parsing
@@ -550,19 +714,49 @@ document.addEventListener('DOMContentLoaded', () => {
         return packages;
     }
 
-    function buildPackagesUrl(baseUrl, codename, component, arch) {
+    function buildPackagesUrl(baseUrl, dist, component, arch) {
         const cleanBaseUrl = baseUrl.replace(/\/$/, '');
         // Check if the base URL already includes the dists directory
         if (cleanBaseUrl.includes('/dists/')) {
             // Extract the base part before /dists/
             const basePart = cleanBaseUrl.split('/dists/')[0];
-            // Check if codename is already in the URL
-            if (cleanBaseUrl.includes(`/dists/${codename}`)) {
+            // Check if dist is already in the URL
+            if (cleanBaseUrl.includes(`/dists/${dist}`)) {
                 return `${cleanBaseUrl}/${component}/binary-${arch}/Packages`;
             } else {
-                return `${basePart}/dists/${codename}/${component}/binary-${arch}/Packages`;
+                return `${basePart}/dists/${dist}/${component}/binary-${arch}/Packages`;
             }
         }
-        return `${cleanBaseUrl}/dists/${codename}/${component}/binary-${arch}/Packages`;
+        return `${cleanBaseUrl}/dists/${dist}/${component}/binary-${arch}/Packages`;
+    }
+
+    // Function to reset all state when loading a new repository
+    function resetState() {
+        // Reset state variables
+        releaseInfo = null;
+        packagesUrl = '';
+        packages = [];
+        currentPage = 1;
+        pageInput.value = 1;
+        searchQuery = '';
+        searchQueryInput.value = '';
+        availableDists = [];
+        
+        // Reset UI selectors
+        distSelect.innerHTML = '<option value="">Select Distribution</option>';
+        archSelect.innerHTML = '<option value="">Select Architecture</option>';
+        componentSelect.innerHTML = '<option value="">Select Component</option>';
+        
+        // Hide all repository-specific UI sections
+        releaseInfoDiv.style.display = 'none';
+        packagesUrlDiv.style.display = 'none';
+        packageCountDiv.style.display = 'none';
+        tableContainerDiv.style.display = 'none';
+        
+        // Clear packages table
+        packagesTable.innerHTML = '';
+        
+        // Clear info grid
+        infoGridDiv.innerHTML = '';
     }
 }); 

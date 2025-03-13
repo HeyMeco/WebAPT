@@ -17,6 +17,10 @@ h1 {
   margin-bottom: 20px;
 }
 
+.clickable-title {
+  cursor: pointer;
+}
+
 .search-box {
   background: white;
   padding: 20px;

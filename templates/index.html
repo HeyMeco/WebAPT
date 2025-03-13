@@ -15,7 +15,7 @@
                 <input 
                     id="repoUrl" 
                     type="text" 
-                    placeholder="Enter APT repository base URL (e.g., https://apt.armbian.com/dists/noble)"
+                    placeholder="Enter APT repository base URL (e.g., https://apt.armbian.com/)"
                 >
                 <button id="loadButton">Load Repository</button>
             </div>
@@ -25,6 +25,9 @@
                 <div class="info-grid" id="infoGrid"></div>
 
                 <div class="selectors">
+                    <select id="distSelect">
+                        <option value="">Select Distribution</option>
+                    </select>
                     <select id="archSelect">
                         <option value="">Select Architecture</option>
                     </select>
