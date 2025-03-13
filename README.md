@@ -84,8 +84,8 @@ The application will be available at http://localhost:5000
 The latest Docker image is available at `ghcr.io/HeyMeco/WebAPT`:
 
 ```bash
-docker pull ghcr.io/HeyMeco/WebAPT:latest
-docker run -p 5000:5000 ghcr.io/HeyMeco/WebAPT:latest
+docker pull ghcr.io/HeyMeco/WebAPT:main
+docker run -p 5000:5000 ghcr.io/HeyMeco/WebAPT:main
 ```
 
 ## How It Works
