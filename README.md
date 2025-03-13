@@ -7,6 +7,9 @@ A web-based tool for browsing and searching APT repositories. This tool allows y
 - Browse APT repositories by entering the base URL
 - View repository metadata including architectures and components
 - Browse and search packages in the repository
+- Support for both regular and gzipped (.gz) Packages files
+  - Automatic fallback to gzipped version when regular Packages file is not available
+  - Visual indicator in UI when gzipped version is being used
 - Download packages directly from the repository
 - Responsive UI for desktop and mobile devices
 - Docker support for easy deployment

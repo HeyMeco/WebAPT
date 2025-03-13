@@ -3,6 +3,8 @@ from flask_cors import CORS
 import requests
 import os
 from lib.apt_parser import AptParser
+import io
+import gzip
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -30,17 +32,42 @@ def proxy():
         return jsonify({'error': 'Missing url parameter'}), 400
     
     try:
+        print(f"Proxying request to: {target_url}")
         response = requests.get(
             target_url, 
             headers={'User-Agent': 'APT-Repository-Previewer/1.0'},
             timeout=10
         )
         
-        return response.text, 200, {
+        # Pass through the original status code from the upstream server
+        status_code = response.status_code
+        print(f"Received status code {status_code} from {target_url}")
+        
+        # Check if the response is a gzipped file
+        if target_url.endswith('.gz') and status_code == 200:
+            try:
+                print(f"Decompressing gzipped content from {target_url}")
+                # Decompress the gzipped content
+                gzip_content = io.BytesIO(response.content)
+                with gzip.GzipFile(fileobj=gzip_content, mode='rb') as f:
+                    decompressed_content = f.read().decode('utf-8')
+                print(f"Successfully decompressed content from {target_url}")
+                return decompressed_content, status_code, {
+                    'Content-Type': 'text/plain',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            except Exception as gz_error:
+                print(f"Error decompressing content from {target_url}: {str(gz_error)}")
+                return jsonify({
+                    'error': f'Error decompressing gzipped content: {str(gz_error)}'
+                }), 500
+        
+        return response.text, status_code, {
             'Content-Type': 'text/plain',
             'Access-Control-Allow-Origin': '*'
         }
     except Exception as e:
+        print(f"Error proxying request to {target_url}: {str(e)}")
         return jsonify({
             'error': f'Error fetching from repository: {str(e)}'
         }), 500

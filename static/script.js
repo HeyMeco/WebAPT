@@ -248,25 +248,62 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoading(true);
             clearError();
 
-            // Fetch the Packages file through the proxy
-            const response = await fetch(PROXY_URL + encodeURIComponent(packagesUrl));
-            const packagesContent = await response.text();
+            let packagesContent;
+            let usingGzipped = false;
 
-            if (response.status !== 200) {
-                throw new Error(`Failed to fetch Packages file: ${response.statusText}`);
+            // First, try to fetch the regular Packages file
+            console.log(`Attempting to fetch regular Packages file: ${packagesUrl}`);
+            let response = await fetch(PROXY_URL + encodeURIComponent(packagesUrl));
+            
+            // Now the proxy will correctly pass through 404 status codes
+            if (response.status === 404) {
+                // Regular Packages file wasn't found, try the gzipped version
+                const gzippedUrl = packagesUrl + '.gz';
+                usingGzipped = true;
+                
+                console.log(`Regular Packages file not found (404), trying gzipped version: ${gzippedUrl}`);
+                
+                // Try the gzipped version
+                response = await fetch(PROXY_URL + encodeURIComponent(gzippedUrl));
+                
+                if (response.status !== 200) {
+                    throw new Error(`Failed to fetch both regular and gzipped Packages file:\n` +
+                                   `- Regular: HTTP 404 Not Found\n` +
+                                   `- Gzipped: HTTP ${response.status} ${response.statusText}`);
+                } else {
+                    console.log(`Successfully fetched gzipped Packages file`);
+                }
+            } else if (response.status !== 200) {
+                throw new Error(`Failed to fetch Packages file: HTTP ${response.status} ${response.statusText}`);
+            } else {
+                console.log(`Successfully fetched regular Packages file`);
             }
+            
+            // At this point, we have a valid response
+            packagesContent = await response.text();
+
+            // Update UI to show which URL format was successfully used
+            if (usingGzipped) {
+                packagesUrlDiv.textContent = `Packages URL: ${packagesUrl}.gz (gzipped)`;
+            } else {
+                packagesUrlDiv.textContent = `Packages URL: ${packagesUrl}`;
+            }
+            packagesUrlDiv.style.display = 'block';
 
             // Parse the Packages file content
+            console.log(`Parsing Packages file content (${packagesContent.length} bytes)`);
             packages = parsePackages(packagesContent);
             
             // Update total package counts when packages are first loaded
             const uniquePackageNames = new Set(packages.map(pkg => pkg.name));
             totalUniquePackages = uniquePackageNames.size;
             totalPackageVersions = packages.length;
+            console.log(`Found ${totalUniquePackages} unique packages with ${totalPackageVersions} total versions`);
             
             // Show packages table
             showPackagesTable();
         } catch (error) {
+            console.error(`Error in fetchPackages:`, error);
             showError(`Error loading packages: ${error.message}`);
         } finally {
             showLoading(false);
@@ -292,9 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
             arch
         );
 
-        // Display the URL
-        packagesUrlDiv.textContent = `Packages URL: ${packagesUrl}`;
-        packagesUrlDiv.style.display = 'block';
+        // The fetchPackages function will now update the UI 
+        // after determining which URL format was used (regular or gzipped)
 
         // Fetch packages
         fetchPackages();
@@ -763,20 +799,28 @@ document.addEventListener('DOMContentLoaded', () => {
         return packages;
     }
 
-    function buildPackagesUrl(baseUrl, dist, component, arch) {
+    function buildPackagesUrl(baseUrl, dist, component, arch, gzExtension = false) {
         const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+        let basePackageUrl;
+        
         // Check if the base URL already includes the dists directory
         if (cleanBaseUrl.includes('/dists/')) {
             // Extract the base part before /dists/
             const basePart = cleanBaseUrl.split('/dists/')[0];
             // Check if dist is already in the URL
             if (cleanBaseUrl.includes(`/dists/${dist}`)) {
-                return `${cleanBaseUrl}/${component}/binary-${arch}/Packages`;
+                basePackageUrl = `${cleanBaseUrl}/${component}/binary-${arch}/Packages`;
             } else {
-                return `${basePart}/dists/${dist}/${component}/binary-${arch}/Packages`;
+                basePackageUrl = `${basePart}/dists/${dist}/${component}/binary-${arch}/Packages`;
             }
+        } else {
+            basePackageUrl = `${cleanBaseUrl}/dists/${dist}/${component}/binary-${arch}/Packages`;
         }
-        return `${cleanBaseUrl}/dists/${dist}/${component}/binary-${arch}/Packages`;
+        
+        if (gzExtension) {
+            return `${basePackageUrl}.gz`;
+        }
+        return basePackageUrl;
     }
 
     // Function to reset all state when loading a new repository
