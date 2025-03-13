@@ -2,9 +2,10 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install dependencies using standard pip
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install gunicorn  # Explicitly ensure gunicorn is installed
 
 # Copy application files
 COPY app.py .
@@ -12,14 +13,15 @@ COPY lib ./lib
 COPY static ./static
 COPY templates ./templates
 
-# Create empty __init__.py if it doesn't exist
-RUN if [ ! -f lib/__init__.py ]; then touch lib/__init__.py; fi
+# Ensure lib is a proper Python package
+RUN touch lib/__init__.py
 
-# Set Python path explicitly to include current directory
-ENV PYTHONPATH=/app
+# Set environment variables
+ENV PYTHONPATH=/app:/app/lib
 ENV PORT=5000
 
+# Expose the port
 EXPOSE 5000
 
-# Run with explicit module path 
-CMD ["sh", "-c", "python -m gunicorn --bind 0.0.0.0:$PORT app:app"] 
+# Run the app with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
