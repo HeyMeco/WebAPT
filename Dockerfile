@@ -1,14 +1,18 @@
+FROM ghcr.io/astral-sh/uv:alpine as builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN uv pip compile requirements.txt -o requirements.lock
+RUN uv pip install --no-cache -r requirements.txt --system
+
 FROM python:3.9-slim
 
 WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+COPY --from=builder /usr/local/lib/python3.9/site-packages/ /usr/local/lib/python3.9/site-packages/
 COPY . .
 
 ENV PORT=5000
 
 EXPOSE 5000
 
-CMD gunicorn --bind 0.0.0.0:$PORT app:app 
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT app:app"] 
