@@ -9,7 +9,7 @@ RUN uv pip install --no-cache -r requirements.txt --system
 FROM python:3.9-slim
 
 WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.9/site-packages/ /usr/local/lib/python3.9/site-packages/
+COPY --from=builder /usr/local /usr/local
 COPY . .
 
 ENV PORT=5000
