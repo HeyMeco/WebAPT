@@ -10,11 +10,10 @@ FROM python:3.9-slim
 
 WORKDIR /app
 COPY --from=builder /usr/local /usr/local
-COPY app.py .
-COPY lib ./lib
-COPY static ./static
-COPY templates ./templates
-COPY requirements.txt .
+COPY app.py requirements.txt ./
+COPY lib/ ./lib/
+COPY static/ ./static/
+COPY templates/ ./templates/
 
 ENV PORT=5000
 ENV PYTHONPATH=/app
