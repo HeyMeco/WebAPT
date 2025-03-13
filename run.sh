@@ -28,6 +28,13 @@ source .venv/bin/activate
 echo "Installing dependencies using UV..."
 uv pip install -r requirements.txt
 
+# Environment variable information
+echo ""
+echo "Environment Variables:"
+echo "  APTREPO - Set a default repository URL (optional)"
+echo "  Example: APTREPO=https://apt.armbian.com python app.py"
+echo ""
+
 # Run the application
 echo "Starting Flask application on http://localhost:5000"
 python app.py 

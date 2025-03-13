@@ -34,23 +34,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let repoBaseUrl = '';
     let availableDists = [];
     let defaultDist = 'stable';
+    let isAptRepoEnvSet = false;
 
     // Proxy URL
     const PROXY_URL = '/proxy?url=';
 
+    // Fetch configuration from server
+    fetchConfig();
+
     // Event Listeners
     repoUrlInput.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !isAptRepoEnvSet) {
             fetchRelease();
         }
     });
 
-    loadButton.addEventListener('click', fetchRelease);
+    loadButton.addEventListener('click', () => {
+        if (!isAptRepoEnvSet) {
+            fetchRelease();
+        }
+    });
     
     // Add click handler to the app title to reset the application
     appTitle.addEventListener('click', () => {
         resetState();
-        repoUrlInput.value = '';
+        if (!isAptRepoEnvSet) {
+            repoUrlInput.value = '';
+        }
     });
     
     // Add CSS class for clickable title instead of setting the style directly
@@ -107,6 +117,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Functions
+    async function fetchConfig() {
+        try {
+            const response = await fetch('/config');
+            if (!response.ok) {
+                console.error('Failed to fetch configuration');
+                return;
+            }
+            
+            const config = await response.json();
+            
+            if (config.APTREPO) {
+                // APTREPO environment variable is set
+                isAptRepoEnvSet = true;
+                repoUrlInput.value = config.APTREPO;
+                repoUrlInput.disabled = true;
+                repoUrlInput.classList.add('disabled');
+                
+                // Add a note to the input field
+                repoUrlInput.title = 'Repository URL is set by the APTREPO environment variable and cannot be changed';
+                
+                // Auto-load the repository
+                fetchRelease();
+            }
+        } catch (error) {
+            console.error('Error fetching configuration:', error);
+        }
+    }
+
     async function fetchRelease() {
         let repoUrl = repoUrlInput.value.trim();
         
@@ -758,5 +796,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Clear info grid
         infoGridDiv.innerHTML = '';
+        
+        // If APTREPO is set, ensure the URL input remains unchanged and disabled
+        if (isAptRepoEnvSet) {
+            repoUrlInput.disabled = true;
+        }
     }
 }); 

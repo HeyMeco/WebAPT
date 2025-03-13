@@ -27,6 +27,9 @@ RUN touch lib/__init__.py
 ENV PYTHONPATH=/app:/app/lib \
     PORT=5000
 
+# Optional environment variables:
+# APTREPO: Set a default repository URL (e.g., APTREPO=https://apt.armbian.com)
+
 # Expose the port
 EXPOSE 5000
 

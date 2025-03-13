@@ -67,6 +67,17 @@ python app.py
 
 The application will be available at http://localhost:5000
 
+### Environment Variables
+
+The application supports the following environment variables:
+
+- `APTREPO`: Set a default APT repository URL. When this is set, the UI will automatically use this repository and disable the URL input field.
+
+Example:
+```bash
+APTREPO=https://apt.armbian.com python app.py
+```
+
 ### Using Docker
 
 1. Build the image:
@@ -79,6 +90,11 @@ The application will be available at http://localhost:5000
    docker run -p 5000:5000 webapt
    ```
 
+   With environment variable:
+   ```bash
+   docker run -p 5000:5000 -e APTREPO=https://apt.armbian.com webapt
+   ```
+
 ### Using GitHub Container Registry
 
 The latest Docker image is available at `ghcr.io/HeyMeco/WebAPT`:
@@ -86,6 +102,11 @@ The latest Docker image is available at `ghcr.io/HeyMeco/WebAPT`:
 ```bash
 docker pull ghcr.io/HeyMeco/WebAPT:main
 docker run -p 5000:5000 ghcr.io/HeyMeco/WebAPT:main
+```
+
+With environment variable:
+```bash
+docker run -p 5000:5000 -e APTREPO=https://apt.armbian.com ghcr.io/HeyMeco/WebAPT:main
 ```
 
 ## How It Works

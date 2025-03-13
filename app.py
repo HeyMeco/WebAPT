@@ -12,6 +12,13 @@ def index():
     """Serve the main HTML page"""
     return send_from_directory('templates', 'index.html')
 
+@app.route('/config')
+def config():
+    """Return configuration values from environment variables"""
+    return jsonify({
+        'APTREPO': os.environ.get('APTREPO', '')
+    })
+
 @app.route('/proxy')
 def proxy():
     """

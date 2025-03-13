@@ -43,8 +43,20 @@ input {
 }
 
 input:focus {
+  border-color: #007bff;
   outline: none;
-  border-color: #4a90e2;
+}
+
+input:disabled {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+  border-color: #ccc;
+  color: #666;
+}
+
+input.disabled {
+  background-color: #f0f0f0;
+  opacity: 0.8;
 }
 
 button {
