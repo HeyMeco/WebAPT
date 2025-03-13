@@ -1,11 +1,11 @@
-FROM python:3.13-slim
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn  # Explicitly ensure gunicorn is installed
+RUN uv pip install --system --no-cache-dir -r requirements.txt \
+    && uv pip install --system --no-cache-dir gunicorn
 
 # Copy application files
 COPY app.py .
@@ -17,8 +17,8 @@ COPY templates ./templates
 RUN touch lib/__init__.py
 
 # Set environment variables
-ENV PYTHONPATH=/app:/app/lib
-ENV PORT=5000
+ENV PYTHONPATH=/app:/app/lib \
+    PORT=5000
 
 # Expose the port
 EXPOSE 5000
