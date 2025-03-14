@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'Valid-Until'
         ];
         
-        // First display the important fields in a specific order
+        // Only display the important fields if they exist
         importantFields.forEach(field => {
             if (releaseInfo[field]) {
                 const div = document.createElement('div');
@@ -507,31 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 infoGridDiv.appendChild(div);
             }
         });
-        
-        // Then display any other fields not already shown
-        Object.keys(releaseInfo).forEach(field => {
-            // Exclude Architectures, Components, and Description fields
-            if (!importantFields.includes(field) && 
-                field !== 'Architectures' && 
-                field !== 'Components' && 
-                field !== 'Description') {
-                const div = document.createElement('div');
-                const strong = document.createElement('strong');
-                strong.textContent = field + ': ';
-                const span = document.createElement('span');
-                
-                // Handle array-like values
-                if (Array.isArray(releaseInfo[field])) {
-                    span.textContent = releaseInfo[field].join(', ');
-                } else {
-                    span.textContent = releaseInfo[field];
-                }
-                
-                div.appendChild(strong);
-                div.appendChild(span);
-                infoGridDiv.appendChild(div);
-            }
-        });
+    
     }
     
     function showReleaseInfo() {
