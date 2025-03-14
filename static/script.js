@@ -35,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let sortDirection = 'asc';
     let repoBaseUrl = '';
     let availableDists = [];
-    let defaultDist = 'stable';
     let isAptRepoEnvSet = false;
 
     // Proxy URL
@@ -173,64 +172,80 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Try to extract the distribution from the URL
-            let initialDist = defaultDist;
+            let selectedDist = '';
             if (cleanBaseUrl.includes('/dists/')) {
                 const [_, distsPath] = cleanBaseUrl.split('/dists/');
                 if (distsPath && distsPath.trim() !== '') {
-                    initialDist = distsPath.split('/')[0];
+                    selectedDist = distsPath.split('/')[0];
                 }
             }
 
-            // Build the Release file URL - handle different URL patterns
-            let releaseUrl;
-            if (cleanBaseUrl.includes('/dists/')) {
-                // Extract the base part and the path after dists/
-                const [basePart, distsPath] = cleanBaseUrl.split('/dists/');
-                
-                if (distsPath.includes('/')) {
-                    // URL already includes a specific path after dists/
-                    releaseUrl = `${cleanBaseUrl}/Release`;
-                } else if (distsPath && distsPath.trim() !== '') {
-                    // URL has something after dists/ but no additional path
-                    releaseUrl = `${cleanBaseUrl}/Release`;  
-                } else {
-                    // URL just ends with dists/
-                    releaseUrl = `${basePart}/dists/${initialDist}/Release`;
-                }
-            } else {
-                releaseUrl = `${cleanBaseUrl}/dists/${initialDist}/Release`;
-            }
-            
-            // Fetch the Release file through the proxy
-            const response = await fetch(PROXY_URL + encodeURIComponent(releaseUrl));
-            const releaseContent = await response.text();
-
-            if (response.status !== 200) {
-                throw new Error(`Failed to fetch Release file: ${response.statusText}`);
-            }
-
-            // Parse the Release file content
-            releaseInfo = parseReleaseFile(releaseContent);
-            
-            // Check for Suite and Codename to determine available distributions
-            availableDists = [];
-            if (releaseInfo.Suite) availableDists.push(releaseInfo.Suite);
-            if (releaseInfo.Codename && releaseInfo.Codename !== releaseInfo.Suite) availableDists.push(releaseInfo.Codename);
-            
-            // Fetch dists directory to discover available distributions
+            // First, try to discover available distributions
             try {
                 await fetchAvailableDists();
+                
+                if (availableDists.length === 0) {
+                    throw new Error('No distributions found in this repository. Please check the URL and try again.');
+                }
+                
+                // If a distribution was specified in the URL and it exists in available dists, pre-select it
+                if (selectedDist && availableDists.includes(selectedDist)) {
+                    console.log(`Using distribution from URL: ${selectedDist}`);
+                    
+                    // Fetch the Release file for the selected distribution
+                    const releaseUrl = `${repoBaseUrl}/dists/${selectedDist}/Release`;
+                    const response = await fetch(PROXY_URL + encodeURIComponent(releaseUrl));
+                    
+                    if (response.status !== 200) {
+                        throw new Error(`Failed to fetch Release file for ${selectedDist}: ${response.statusText}`);
+                    }
+                    
+                    const releaseContent = await response.text();
+                    releaseInfo = parseReleaseFile(releaseContent);
+                }
             } catch (e) {
-                console.warn("Could not fetch available distributions:", e);
+                // If we can't discover distributions or there's another error
+                console.warn("Error:", e);
+                throw new Error(`Could not load repository distributions: ${e.message}`);
             }
             
-            // Add the initial dist if not already in the list
-            if (!availableDists.includes(initialDist)) {
-                availableDists.push(initialDist);
-            }
+            // Show the distributions selection UI
+            populateDistributionSelector();
+            releaseInfoDiv.style.display = 'block';
             
-            // Show release info
-            showReleaseInfo();
+            // If we already have release info (from a specified distribution), populate the UI
+            if (releaseInfo) {
+                updateReleaseInfoGrid();
+                
+                // Populate architecture dropdown
+                archSelect.innerHTML = '<option value="">Select Architecture</option>';
+                if (releaseInfo.Architectures) {
+                    releaseInfo.Architectures.forEach(arch => {
+                        const option = document.createElement('option');
+                        option.value = arch;
+                        option.textContent = arch;
+                        archSelect.appendChild(option);
+                    });
+                }
+                
+                // Populate component dropdown
+                componentSelect.innerHTML = '<option value="">Select Component</option>';
+                if (releaseInfo.Components) {
+                    releaseInfo.Components.forEach(component => {
+                        const option = document.createElement('option');
+                        option.value = component;
+                        option.textContent = component;
+                        componentSelect.appendChild(option);
+                    });
+                }
+            } else {
+                // Add a message prompting the user to select a distribution
+                const message = document.createElement('div');
+                message.className = 'select-dist-message';
+                message.textContent = 'Please select a distribution below to load repository details';
+                infoGridDiv.innerHTML = '';
+                infoGridDiv.appendChild(message);
+            }
         } catch (error) {
             showError(`Error loading repository: ${error.message}`);
         } finally {
@@ -344,21 +359,46 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const distsUrl = `${repoBaseUrl}/dists/`;
             const response = await fetch(PROXY_URL + encodeURIComponent(distsUrl));
+            
+            if (response.status !== 200) {
+                console.warn(`Failed to fetch dists directory: ${response.statusText}`);
+                return;
+            }
+            
             const content = await response.text();
             
+            // Common Ubuntu/Debian distributions to try if we can't parse the directory
+            const commonDists = ['jammy', 'focal', 'bionic', 'bullseye', 'buster', 'bookworm', 'stable', 'testing', 'unstable'];
+            
+            // Try to extract distribution names from directory listing HTML
             // Simple regex to find directory names
-            // This is a basic approach and might not work for all server configurations
             const dirRegex = /<a[^>]*href="([^"\/]+)\/"[^>]*>/g;
             let match;
+            let foundDists = false;
             
             while ((match = dirRegex.exec(content)) !== null) {
                 const dist = match[1];
                 if (!availableDists.includes(dist) && dist !== '.' && dist !== '..') {
                     availableDists.push(dist);
+                    foundDists = true;
                 }
             }
+            
+            // If we didn't find any distributions from HTML, try common distributions
+            // but only if we're told to try them automatically
+            if (!foundDists && availableDists.length === 0) {
+                console.log("No distributions found in directory listing");
+                // Instead of automatically adding common dists, we'll show an error
+                throw new Error("Could not detect available distributions from this repository. The repository might not allow directory listings.");
+            }
+            
+            // Sort the distributions alphabetically
+            availableDists.sort();
+            
+            console.log(`Found ${availableDists.length} distributions: ${availableDists.join(', ')}`);
         } catch (error) {
             console.warn("Failed to fetch distributions from directory listing", error);
+            throw error;
         }
     }
 
@@ -385,17 +425,23 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Build the Release file URL for the selected distribution
             const releaseUrl = `${repoBaseUrl}/dists/${dist}/Release`;
+            console.log(`Fetching Release file from: ${releaseUrl}`);
             
             // Fetch the Release file through the proxy
             const response = await fetch(PROXY_URL + encodeURIComponent(releaseUrl));
-            const releaseContent = await response.text();
-
+            
             if (response.status !== 200) {
                 throw new Error(`Failed to fetch Release file for ${dist}: ${response.statusText}`);
             }
+            
+            const releaseContent = await response.text();
 
             // Parse the Release file content
             releaseInfo = parseReleaseFile(releaseContent);
+            console.log(`Successfully parsed Release file for ${dist}`);
+            
+            // Update info grid with the new release info
+            updateReleaseInfoGrid();
             
             // Populate architecture dropdown
             if (releaseInfo.Architectures) {
@@ -405,6 +451,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     option.textContent = arch;
                     archSelect.appendChild(option);
                 });
+                console.log(`Loaded ${releaseInfo.Architectures.length} architectures`);
+            } else {
+                console.warn("No architectures found in Release file");
             }
             
             // Populate component dropdown
@@ -415,12 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     option.textContent = component;
                     componentSelect.appendChild(option);
                 });
+                console.log(`Loaded ${releaseInfo.Components.length} components`);
+            } else {
+                console.warn("No components found in Release file");
             }
             
-            // Update info grid with the new release info
-            updateReleaseInfoGrid();
-            
         } catch (error) {
+            console.error(`Error in handleDistChange:`, error);
             showError(`Error loading distribution: ${error.message}`);
         } finally {
             showLoading(false);
@@ -434,8 +484,17 @@ document.addEventListener('DOMContentLoaded', () => {
         infoGridDiv.innerHTML = '';
 
         // Display important fields
-        const importantFields = ['Origin', 'Label', 'Suite', 'Codename', 'Version', 'Date', 'Valid-Until', 'NotAutomatic', 'ButAutomaticUpgrades'];
+        const importantFields = [
+            'Origin', 
+            'Label', 
+            'Suite', 
+            'Codename', 
+            'Version', 
+            'Date', 
+            'Valid-Until'
+        ];
         
+        // First display the important fields in a specific order
         importantFields.forEach(field => {
             if (releaseInfo[field]) {
                 const div = document.createElement('div');
@@ -443,6 +502,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 strong.textContent = field + ': ';
                 const span = document.createElement('span');
                 span.textContent = releaseInfo[field];
+                div.appendChild(strong);
+                div.appendChild(span);
+                infoGridDiv.appendChild(div);
+            }
+        });
+        
+        // Then display any other fields not already shown
+        Object.keys(releaseInfo).forEach(field => {
+            // Exclude Architectures, Components, and Description fields
+            if (!importantFields.includes(field) && 
+                field !== 'Architectures' && 
+                field !== 'Components' && 
+                field !== 'Description') {
+                const div = document.createElement('div');
+                const strong = document.createElement('strong');
+                strong.textContent = field + ': ';
+                const span = document.createElement('span');
+                
+                // Handle array-like values
+                if (Array.isArray(releaseInfo[field])) {
+                    span.textContent = releaseInfo[field].join(', ');
+                } else {
+                    span.textContent = releaseInfo[field];
+                }
+                
                 div.appendChild(strong);
                 div.appendChild(span);
                 infoGridDiv.appendChild(div);
@@ -858,5 +942,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isAptRepoEnvSet) {
             repoUrlInput.disabled = true;
         }
+    }
+
+    // New function to populate the distribution selector
+    function populateDistributionSelector() {
+        // Clear any existing options
+        distSelect.innerHTML = '<option value="">Select Distribution</option>';
+        
+        // Add each available distribution as an option
+        availableDists.forEach(dist => {
+            const option = document.createElement('option');
+            option.value = dist;
+            option.textContent = dist;
+            distSelect.appendChild(option);
+        });
+        
+        // Add a visual cue to guide the user
+        distSelect.classList.add('highlight-select');
+        setTimeout(() => {
+            distSelect.classList.remove('highlight-select');
+        }, 2000);
     }
 }); 
