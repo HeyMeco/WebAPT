@@ -10,6 +10,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app import app
 from lib.apt_parser import AptParser
 
+# Define test repositories for easier changes in the future
+TEST_REPOSITORIES = [
+    {
+        "name": "Debian Bullseye",
+        "base_url": "http://deb.debian.org/debian",
+        "distribution": "bullseye",
+        "release_url": "http://deb.debian.org/debian/dists/bullseye/Release",
+        "packages_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages",
+        "expected_origin": "Debian",
+        "expected_suite": "stable"
+    }
+]
+
 class TestFetch(unittest.TestCase):
     """Test the fetch functionality for Debian repositories"""
 
@@ -17,6 +30,9 @@ class TestFetch(unittest.TestCase):
         """Set up the test client"""
         self.app = app.test_client()
         self.app.testing = True
+        
+        # Get the first test repository
+        self.test_repo = TEST_REPOSITORIES[0]
         
         # Minimal hardcoded examples instead of loading from files
         self.sample_release = """Origin: Debian
@@ -38,9 +54,9 @@ Version: 2.31-13
 Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
 """
         
-        # Define expected values
-        self.expected_origin = "Debian"
-        self.expected_suite = "stable"
+        # Define expected values from the test repository
+        self.expected_origin = self.test_repo["expected_origin"]
+        self.expected_suite = self.test_repo["expected_suite"]
 
     def test_proxy_endpoint_exists(self):
         """Test that the proxy endpoint exists"""
@@ -59,8 +75,8 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         mock_response.text = self.sample_release
         mock_get.return_value = mock_response
 
-        # Call the proxy endpoint with a test URL
-        test_url = "http://deb.debian.org/debian/dists/bullseye/Release"
+        # Call the proxy endpoint with a test URL from the repository array
+        test_url = self.test_repo["release_url"]
         print(f"Fetching from URL: {test_url}")
         response = self.app.get(f'/proxy?url={test_url}')
 
@@ -125,8 +141,8 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         mock_response.text = self.sample_packages
         mock_get.return_value = mock_response
 
-        # Call the proxy endpoint with a test URL
-        test_url = "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages"
+        # Call the proxy endpoint with a test URL from the repository array
+        test_url = self.test_repo["packages_url"]
         print(f"Fetching from URL: {test_url}")
         response = self.app.get(f'/proxy?url={test_url}')
 
@@ -221,7 +237,7 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         
         # Step 1: Fetch the Release file
         print("\nStep 1: Fetching Release file...")
-        release_url = "http://deb.debian.org/debian/dists/bullseye/Release"
+        release_url = self.test_repo["release_url"]
         response = self.app.get(f'/proxy?url={release_url}')
         self.assertEqual(response.status_code, 200)
         print(f"✓ Release fetch successful with status code: {response.status_code}")

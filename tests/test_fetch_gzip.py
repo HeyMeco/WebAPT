@@ -12,6 +12,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app import app
 from lib.apt_parser import AptParser
 
+# Define test repositories for easier changes in the future
+TEST_REPOSITORIES = [
+    {
+        "name": "Debian Bullseye",
+        "base_url": "http://deb.debian.org/debian",
+        "distribution": "bullseye",
+        "packages_gz_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz"
+    }
+]
+
 class TestFetchGzip(unittest.TestCase):
     """Test the fetch functionality for gzipped Debian repository files"""
 
@@ -19,6 +29,9 @@ class TestFetchGzip(unittest.TestCase):
         """Set up the test client"""
         self.app = app.test_client()
         self.app.testing = True
+        
+        # Get the first test repository
+        self.test_repo = TEST_REPOSITORIES[0]
         
         # Minimal hardcoded example instead of loading from file
         self.sample_packages = """Package: apt
@@ -58,8 +71,8 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         mock_response.content = self.gzipped_content
         mock_get.return_value = mock_response
 
-        # Call the proxy endpoint with a test URL
-        test_url = "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz"
+        # Call the proxy endpoint with a test URL from the repository array
+        test_url = self.test_repo["packages_gz_url"]
         print(f"Fetching gzipped file from URL: {test_url}")
         response = self.app.get(f'/proxy?url={test_url}')
 
@@ -115,8 +128,8 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         mock_response.content = corrupted_content
         mock_get.return_value = mock_response
 
-        # Call the proxy endpoint with a test URL
-        test_url = "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz"
+        # Call the proxy endpoint with a test URL from the repository array
+        test_url = self.test_repo["packages_gz_url"]
         print(f"Fetching corrupted gzipped file from URL: {test_url}")
         print(f"Corrupted content (first 20 bytes): {corrupted_content[:20]}")
         
