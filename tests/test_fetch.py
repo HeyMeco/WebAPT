@@ -17,9 +17,18 @@ TEST_REPOSITORIES = [
         "base_url": "http://deb.debian.org/debian",
         "distribution": "bullseye",
         "release_url": "http://deb.debian.org/debian/dists/bullseye/Release",
-        "packages_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages",
+        "packages_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz",
         "expected_origin": "Debian",
-        "expected_suite": "stable"
+        "expected_suite": "oldstable"  # Bullseye is now oldstable
+    },
+    {
+        "name": "Ubuntu Archive",
+        "base_url": "https://archive.ubuntu.com/ubuntu",
+        "distribution": "noble",
+        "release_url": "https://archive.ubuntu.com/ubuntu/dists/noble/Release",
+        "packages_url": "https://archive.ubuntu.com/ubuntu/dists/noble/main/binary-amd64/Packages.gz",
+        "expected_origin": "Ubuntu",
+        "expected_suite": "noble"
     }
 ]
 
@@ -30,33 +39,6 @@ class TestFetch(unittest.TestCase):
         """Set up the test client"""
         self.app = app.test_client()
         self.app.testing = True
-        
-        # Get the first test repository
-        self.test_repo = TEST_REPOSITORIES[0]
-        
-        # Minimal hardcoded examples instead of loading from files
-        self.sample_release = """Origin: Debian
-Suite: stable
-Codename: bullseye
-Architectures: amd64 arm64
-Components: main contrib
-Description: Debian 11 Released
-"""
-        
-        self.sample_packages = """Package: apt
-Priority: required
-Version: 2.2.4
-Filename: pool/main/a/apt/apt_2.2.4_amd64.deb
-
-Package: libc6
-Priority: required
-Version: 2.31-13
-Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
-"""
-        
-        # Define expected values from the test repository
-        self.expected_origin = self.test_repo["expected_origin"]
-        self.expected_suite = self.test_repo["expected_suite"]
 
     def test_proxy_endpoint_exists(self):
         """Test that the proxy endpoint exists"""
@@ -64,127 +46,110 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         self.assertNotEqual(response.status_code, 404, "Proxy endpoint should exist")
         print(f"\n✓ Proxy endpoint exists with status code {response.status_code}")
 
-    @patch('app.requests.get')
-    def test_fetch_release_file(self, mock_get):
-        """Test fetching a Release file from a Debian repository"""
+    def test_fetch_release_file(self):
+        """Test fetching a Release file from repositories using real requests"""
         print("\n\nTesting Release file fetching...")
         
-        # Mock the response from the requests.get call
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = self.sample_release
-        mock_get.return_value = mock_response
+        for repo in TEST_REPOSITORIES:
+            with self.subTest(repository=repo["name"]):
+                print(f"\nTesting repository: {repo['name']}")
+                
+                # Call the proxy endpoint with the test URL from the repository
+                test_url = repo["release_url"]
+                print(f"Fetching from URL: {test_url}")
+                response = self.app.get(f'/proxy?url={test_url}')
 
-        # Call the proxy endpoint with a test URL from the repository array
-        test_url = self.test_repo["release_url"]
-        print(f"Fetching from URL: {test_url}")
-        response = self.app.get(f'/proxy?url={test_url}')
+                # Assert that the response is successful
+                self.assertEqual(response.status_code, 200, f"Should return status code 200 for {repo['name']}")
+                print(f"✓ Response successful with status code: {response.status_code}")
+                
+                # Decode response text
+                response_text = response.data.decode('utf-8')
+                
+                # Verify Release file structure by parsing it
+                parsed_release = AptParser.parse_release_file(response_text)
+                print("\nValidating repository metadata...")
+                
+                # Check essential fields
+                self.assertIn('Origin', parsed_release, f"Release file for {repo['name']} should contain Origin")
+                self.assertIn('Suite', parsed_release, f"Release file for {repo['name']} should contain Suite")
+                self.assertIn('Codename', parsed_release, f"Release file for {repo['name']} should contain Codename")
+                self.assertIn('Architectures', parsed_release, f"Release file for {repo['name']} should contain Architectures")
+                self.assertIn('Components', parsed_release, f"Release file for {repo['name']} should contain Components")
+                
+                # Print and verify values against expected ones
+                print(f"Origin: {parsed_release['Origin']}")
+                print(f"Suite: {parsed_release['Suite']}")
+                print(f"Codename: {parsed_release['Codename']}")
+                print(f"Architectures: {parsed_release['Architectures']}")
+                print(f"Components: {parsed_release['Components']}")
+                
+                # Verify expected values if provided
+                if "expected_origin" in repo:
+                    expected_origin = repo["expected_origin"]
+                    self.assertEqual(parsed_release['Origin'], expected_origin, 
+                                   f"Unexpected Origin: got '{parsed_release['Origin']}', expected '{expected_origin}'")
+                    print(f"✓ Origin verification successful for {repo['name']}")
+                    
+                if "expected_suite" in repo:
+                    expected_suite = repo["expected_suite"]
+                    self.assertEqual(parsed_release['Suite'], expected_suite, 
+                                   f"Unexpected Suite: got '{parsed_release['Suite']}', expected '{expected_suite}'")
+                    print(f"✓ Suite verification successful for {repo['name']}")
+                
+                print(f"\n✓ Release file fetch and validation completed successfully for {repo['name']}")
 
-        # Assert that the response is successful
-        self.assertEqual(response.status_code, 200, "Should return status code 200")
-        print(f"✓ Response successful with status code: {response.status_code}")
-        
-        # Verify that requests.get was called with the expected URL
-        mock_get.assert_called_once_with(
-            test_url,
-            headers={'User-Agent': 'APT-Repository-Previewer/1.0'},
-            timeout=10
-        )
-        print(f"✓ Request made with correct parameters")
-        
-        # Decode response text
-        response_text = response.data.decode('utf-8')
-        
-        # Only verify Origin and Suite in the response
-        print("\nVerifying Origin and Suite in raw response...")
-        origin_line = next((line for line in response_text.splitlines() if line.startswith('Origin:')), None)
-        suite_line = next((line for line in response_text.splitlines() if line.startswith('Suite:')), None)
-        
-        print(f"Expected Origin: '{self.expected_origin}'")
-        print(f"Found in response: '{origin_line}'")
-        self.assertIn(f"Origin: {self.expected_origin}", response_text, 
-                     f"Response should contain 'Origin: {self.expected_origin}'")
-        print("✓ Origin verification successful")
-        
-        print(f"Expected Suite: '{self.expected_suite}'")
-        print(f"Found in response: '{suite_line}'")
-        self.assertIn(f"Suite: {self.expected_suite}", response_text, 
-                     f"Response should contain 'Suite: {self.expected_suite}'")
-        print("✓ Suite verification successful")
-        
-        # Test that we can parse the response using AptParser
-        print("\nVerifying Origin and Suite in parsed response...")
-        parsed_release = AptParser.parse_release_file(response_text)
-        
-        print(f"Expected Origin: '{self.expected_origin}'")
-        print(f"Parsed Origin: '{parsed_release['Origin']}'")
-        self.assertEqual(parsed_release['Origin'], self.expected_origin, 
-                        f"Parsed Origin should be '{self.expected_origin}'")
-        print("✓ Parsed Origin verification successful")
-        
-        print(f"Expected Suite: '{self.expected_suite}'")
-        print(f"Parsed Suite: '{parsed_release['Suite']}'")
-        self.assertEqual(parsed_release['Suite'], self.expected_suite, 
-                        f"Parsed Suite should be '{self.expected_suite}'")
-        print("✓ Parsed Suite verification successful")
-        
-        print("\n✓ Release file fetch test completed successfully")
-
-    @patch('app.requests.get')
-    def test_fetch_packages_file(self, mock_get):
-        """Test fetching a Packages file from a Debian repository"""
+    def test_fetch_packages_file(self):
+        """Test fetching a Packages file from repositories using real requests"""
         print("\n\nTesting Packages file fetching...")
         
-        # Mock the response from the requests.get call
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = self.sample_packages
-        mock_get.return_value = mock_response
+        for repo in TEST_REPOSITORIES:
+            with self.subTest(repository=repo["name"]):
+                print(f"\nTesting repository: {repo['name']}")
+                
+                # Call the proxy endpoint with the test URL from the repository
+                test_url = repo["packages_url"]
+                print(f"Fetching from URL: {test_url}")
+                response = self.app.get(f'/proxy?url={test_url}')
 
-        # Call the proxy endpoint with a test URL from the repository array
-        test_url = self.test_repo["packages_url"]
-        print(f"Fetching from URL: {test_url}")
-        response = self.app.get(f'/proxy?url={test_url}')
+                # Assert that the response is successful
+                self.assertEqual(response.status_code, 200, f"Should return status code 200 for {repo['name']}")
+                print(f"✓ Response successful with status code: {response.status_code}")
+                
+                # Decode response text
+                response_text = response.data.decode('utf-8')
+                
+                # Verify that we can parse the Packages content
+                packages = AptParser.parse_packages(response_text)
+                package_count = len(packages)
+                
+                # Ensure we got packages
+                self.assertGreater(package_count, 0, f"Should have parsed packages from {repo['name']}")
+                print(f"Parsed {package_count} packages from {repo['name']}")
+                
+                # Print some stats about the packages
+                print("\nPackage statistics:")
+                if package_count > 0:
+                    # Sample a few packages
+                    sample_size = min(3, package_count)
+                    print(f"Showing first {sample_size} packages from total of {package_count}:")
+                    for i, package in enumerate(packages[:sample_size]):
+                        print(f"  {i+1}. {package.get('name', 'Unknown')} - {package.get('version', 'Unknown version')}")
+                
+                # Verify required fields in packages
+                required_fields = ['name', 'version', 'filename']
+                for field in required_fields:
+                    for i, package in enumerate(packages[:10]):  # Check first 10 packages
+                        self.assertIn(field, package, f"Package {i+1} missing required field: {field}")
+                
+                print(f"✓ All required fields present in package entries")
+                print(f"\n✓ Packages file fetch and validation completed successfully for {repo['name']}")
 
-        # Assert that the response is successful
-        self.assertEqual(response.status_code, 200, "Should return status code 200")
-        print(f"✓ Response successful with status code: {response.status_code}")
-        
-        # Verify that requests.get was called with the expected URL
-        mock_get.assert_called_once_with(
-            test_url,
-            headers={'User-Agent': 'APT-Repository-Previewer/1.0'},
-            timeout=10
-        )
-        print(f"✓ Request made with correct parameters")
-        
-        # Only verify that "Package:" exists in the content
-        response_text = response.data.decode('utf-8')
-        
-        print("\nVerifying Package entries in response...")
-        package_entries = [line for line in response_text.splitlines() if line.startswith('Package:')]
-        package_count = len(package_entries)
-        
-        print(f"Looking for 'Package:' entries in response")
-        print(f"Found {package_count} package entries")
-        if package_count > 0:
-            print(f"First package entry found: '{package_entries[0]}'")
-            
-        self.assertIn("Package:", response_text, "Response should contain Package: entries")
-        print("✓ Package entries verification successful")
-        
-        print("\n✓ Packages file fetch test completed successfully")
-
-    @patch('app.requests.get')
-    def test_error_handling(self, mock_get):
-        """Test handling of errors when fetching from a repository"""
+    def test_error_handling(self):
+        """Test handling of errors when fetching from repositories"""
         print("\n\nTesting error handling...")
         
-        # Mock the response to raise an exception
-        error_message = "Connection error"
-        mock_get.side_effect = requests.exceptions.RequestException(error_message)
-
-        # Call the proxy endpoint with a test URL
+        # Use a non-existent URL to test error handling
         test_url = "http://invalid-repo.example.com/debian/dists/bullseye/Release"
         print(f"Fetching from invalid URL: {test_url}")
         response = self.app.get(f'/proxy?url={test_url}')
@@ -195,128 +160,83 @@ Filename: pool/main/g/glibc/libc6_2.31-13+deb11u4_amd64.deb
         
         # Verify the error message in the response
         response_json = response.get_json()
-        print(f"Expected error message contains: '{error_message}'")
-        print(f"Actual error message: '{response_json.get('error', '')}'")
-        
         self.assertIn("error", response_json, "Response should contain an error field")
-        self.assertIn(error_message, response_json["error"], f"Response should contain '{error_message}'")
+        print(f"Error message: '{response_json.get('error', '')}'")
         print("✓ Error message verification successful")
         
         print("\n✓ Error handling test completed successfully")
         
-    @patch('app.requests.get')
-    def test_integration_fetch_flow(self, mock_get):
+    def test_integration_fetch_flow(self):
         """
-        Test the full flow of fetching and parsing a Debian repository
+        Test the full flow of fetching and parsing repositories
         First getting the Release file, then getting Packages for each component/arch
         """
         print("\n\nTesting full repository fetch flow...")
         
-        # Mock for Release file
-        release_response = MagicMock()
-        release_response.status_code = 200
-        release_response.text = self.sample_release
-        
-        # Mock for Packages file
-        packages_response = MagicMock()
-        packages_response.status_code = 200
-        packages_response.text = self.sample_packages
-        
-        # Configure mock to return different responses based on URL
-        def side_effect(url, **kwargs):
-            if '/Release' in url:
-                print(f"Mock returning Release file for URL: {url}")
-                return release_response
-            if '/Packages' in url:
-                print(f"Mock returning Packages file for URL: {url}")
-                return packages_response
-            print(f"Mock returning 404 for URL: {url}")
-            return MagicMock(status_code=404, text="Not Found")
-            
-        mock_get.side_effect = side_effect
-        
-        # Step 1: Fetch the Release file
-        print("\nStep 1: Fetching Release file...")
-        release_url = self.test_repo["release_url"]
-        response = self.app.get(f'/proxy?url={release_url}')
-        self.assertEqual(response.status_code, 200)
-        print(f"✓ Release fetch successful with status code: {response.status_code}")
-        
-        # Parse the Release file to get components and architectures
-        response_text = response.data.decode('utf-8')
-        
-        # Verify Origin and Suite in the Release file
-        print("\nVerifying Origin and Suite in Release file...")
-        origin_line = next((line for line in response_text.splitlines() if line.startswith('Origin:')), None)
-        suite_line = next((line for line in response_text.splitlines() if line.startswith('Suite:')), None)
-        
-        print(f"Expected Origin: '{self.expected_origin}'")
-        print(f"Found in response: '{origin_line}'")
-        self.assertIn(f"Origin: {self.expected_origin}", response_text)
-        print("✓ Origin verification successful")
-        
-        print(f"Expected Suite: '{self.expected_suite}'")
-        print(f"Found in response: '{suite_line}'")
-        self.assertIn(f"Suite: {self.expected_suite}", response_text)
-        print("✓ Suite verification successful")
-        
-        release_data = AptParser.parse_release_file(response_text)
-        
-        # Only validate Origin and Suite
-        print("\nVerifying parsed Origin and Suite...")
-        print(f"Expected Origin: '{self.expected_origin}'")
-        print(f"Parsed Origin: '{release_data['Origin']}'")
-        self.assertEqual(release_data['Origin'], self.expected_origin)
-        print("✓ Parsed Origin verification successful")
-        
-        print(f"Expected Suite: '{self.expected_suite}'")
-        print(f"Parsed Suite: '{release_data['Suite']}'")
-        self.assertEqual(release_data['Suite'], self.expected_suite)
-        print("✓ Parsed Suite verification successful")
-        
-        # Still need these for building the URL, but don't validate their values
-        print("\nVerifying existence of required fields for URL building...")
-        self.assertTrue('Components' in release_data, "Release data should contain Components")
-        print(f"✓ Components found: {release_data['Components']}")
-        
-        self.assertTrue('Architectures' in release_data, "Release data should contain Architectures")
-        print(f"✓ Architectures found: {release_data['Architectures']}")
-        
-        self.assertTrue('Codename' in release_data, "Release data should contain Codename")
-        print(f"✓ Codename found: {release_data['Codename']}")
-        
-        # Step 2: Fetch Packages file for main/amd64
-        print("\nStep 2: Fetching Packages file...")
-        component = release_data['Components'][0]  # Just use the first component
-        arch = release_data['Architectures'][0]     # Just use the first architecture
-        codename = release_data['Codename']
-        
-        print(f"Using Component: {component}")
-        print(f"Using Architecture: {arch}")
-        print(f"Using Codename: {codename}")
-        
-        packages_url = AptParser.build_packages_url("http://deb.debian.org/debian", codename, component, arch)
-        print(f"Built Packages URL: {packages_url}")
-        
-        response = self.app.get(f'/proxy?url={packages_url}')
-        self.assertEqual(response.status_code, 200)
-        print(f"✓ Packages fetch successful with status code: {response.status_code}")
-        
-        # Verify that "Package:" exists in the Packages file
-        print("\nVerifying Package entries in Packages file...")
-        response_text = response.data.decode('utf-8')
-        package_entries = [line for line in response_text.splitlines() if line.startswith('Package:')]
-        package_count = len(package_entries)
-        
-        print(f"Looking for 'Package:' entries in response")
-        print(f"Found {package_count} package entries")
-        if package_count > 0:
-            print(f"First package entry found: '{package_entries[0]}'")
-            
-        self.assertIn("Package:", response_text, "Response should contain Package: entries")
-        print("✓ Package entries verification successful")
-        
-        print("\n✓ Full repository fetch flow test completed successfully")
+        for repo in TEST_REPOSITORIES:
+            with self.subTest(repository=repo["name"]):
+                print(f"\nTesting repository: {repo['name']}")
+                
+                # Step 1: Fetch the Release file
+                print("\nStep 1: Fetching Release file...")
+                release_url = repo["release_url"]
+                response = self.app.get(f'/proxy?url={release_url}')
+                self.assertEqual(response.status_code, 200, f"Should return status code 200 for {repo['name']} Release")
+                print(f"✓ Release fetch successful with status code: {response.status_code}")
+                
+                # Parse the Release file to get components and architectures
+                response_text = response.data.decode('utf-8')
+                release_data = AptParser.parse_release_file(response_text)
+                
+                # Verify essential Release file information
+                print(f"Repository: {release_data.get('Origin', 'Unknown')} {release_data.get('Suite', 'Unknown')}")
+                print(f"Codename: {release_data.get('Codename', 'Unknown')}")
+                
+                # Verify existence of required fields for URL building
+                self.assertIn('Components', release_data, "Release data should contain Components")
+                self.assertIn('Architectures', release_data, "Release data should contain Architectures")
+                self.assertIn('Codename', release_data, "Release data should contain Codename")
+                
+                print(f"Components: {release_data['Components']}")
+                print(f"Architectures: {release_data['Architectures']}")
+                
+                # Step 2: Fetch Packages file for main/amd64
+                print("\nStep 2: Fetching Packages file...")
+                component = release_data['Components'][0]  # Just use the first component
+                
+                # Make sure we use a valid architecture
+                valid_archs = ['amd64', 'arm64', 'i386']
+                arch = next((a for a in valid_archs if a in release_data['Architectures']), 'amd64')
+                    
+                codename = release_data['Codename']
+                
+                print(f"Using Component: {component}")
+                print(f"Using Architecture: {arch}")
+                print(f"Using Codename: {codename}")
+                
+                packages_url = AptParser.build_packages_url(repo["base_url"], codename, component, arch) + ".gz"
+                print(f"Built Packages URL: {packages_url}")
+                
+                response = self.app.get(f'/proxy?url={packages_url}')
+                self.assertEqual(response.status_code, 200, f"Should return status code 200 for {repo['name']} Packages")
+                print(f"✓ Packages fetch successful with status code: {response.status_code}")
+                
+                # Parse the Packages file to get package information
+                response_text = response.data.decode('utf-8')
+                packages = AptParser.parse_packages(response_text)
+                
+                # Verify we got packages
+                package_count = len(packages)
+                self.assertGreater(package_count, 0, f"Should have parsed packages from {repo['name']}")
+                print(f"Parsed {package_count} packages from {repo['name']}")
+                
+                # Sample a few packages
+                sample_size = min(3, package_count)
+                print(f"\nShowing sample of {sample_size} packages:")
+                for i, package in enumerate(packages[:sample_size]):
+                    print(f"  {i+1}. {package.get('name', 'Unknown')} - {package.get('version', 'Unknown version')}")
+                
+                print(f"\n✓ Full repository fetch flow completed successfully for {repo['name']}")
 
 if __name__ == '__main__':
     unittest.main() 
