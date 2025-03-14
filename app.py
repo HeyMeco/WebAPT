@@ -36,7 +36,7 @@ def proxy():
         response = requests.get(
             target_url, 
             headers={'User-Agent': 'APT-Repository-Previewer/1.0'},
-            timeout=10
+            timeout=(3.05, 10)  # (connect_timeout, read_timeout) in seconds
         )
         
         # Pass through the original status code from the upstream server
