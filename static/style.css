@@ -410,4 +410,27 @@ select {
   border-radius: 4px;
   text-align: center;
   line-height: 1.5;
+}
+
+/* Footer styles */
+.footer {
+  margin-top: 30px;
+  text-align: center;
+  padding: 15px 0;
+  border-top: 1px solid #ddd;
+}
+
+.footer-content {
+  color: #666;
+  font-size: 14px;
+}
+
+.footer a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer a:hover {
+  text-decoration: underline;
 } 
