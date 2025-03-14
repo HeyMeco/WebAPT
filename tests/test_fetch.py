@@ -13,13 +13,13 @@ from lib.apt_parser import AptParser
 # Define test repositories for easier changes in the future
 TEST_REPOSITORIES = [
     {
-        "name": "Debian Bullseye",
+        "name": "Debian Bookworm",
         "base_url": "http://deb.debian.org/debian",
-        "distribution": "bullseye",
-        "release_url": "http://deb.debian.org/debian/dists/bullseye/Release",
-        "packages_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz",
+        "distribution": "bookworm",
+        "release_url": "http://deb.debian.org/debian/dists/bookworm/Release",
+        "packages_url": "http://deb.debian.org/debian/dists/bookworm/main/binary-amd64/Packages.gz",
         "expected_origin": "Debian",
-        "expected_suite": "oldstable"  # Bullseye is now oldstable
+        "expected_suite": "stable"
     },
     {
         "name": "Ubuntu Archive",
@@ -150,7 +150,7 @@ class TestFetch(unittest.TestCase):
         print("\n\nTesting error handling...")
         
         # Use a non-existent URL to test error handling
-        test_url = "http://invalid-repo.example.com/debian/dists/bullseye/Release"
+        test_url = "http://invalid-repo.example.com/debian/dists/booworm/Release"
         print(f"Fetching from invalid URL: {test_url}")
         response = self.app.get(f'/proxy?url={test_url}')
 

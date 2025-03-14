@@ -15,10 +15,10 @@ from lib.apt_parser import AptParser
 # Define test repositories for easier changes in the future
 TEST_REPOSITORIES = [
     {
-        "name": "Debian Bullseye",
+        "name": "Debian Bookworm",
         "base_url": "http://deb.debian.org/debian",
-        "distribution": "bullseye",
-        "packages_gz_url": "http://deb.debian.org/debian/dists/bullseye/main/binary-amd64/Packages.gz"
+        "distribution": "bookworm",
+        "packages_gz_url": "http://deb.debian.org/debian/dists/bookworm/main/binary-amd64/Packages.gz"
     },
     {
         "name": "Ubuntu Archive",
