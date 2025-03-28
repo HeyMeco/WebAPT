@@ -1,5 +1,7 @@
 # APT Repository Previewer
 
+![WebAPT-Dashboard](./.github/WebAPT-Screenshot.jpeg)
+
 A web-based tool for browsing and searching APT repositories. This tool allows you to explore package repositories, view package information, and download packages directly from the browser.
 
 ## Features
@@ -14,6 +16,10 @@ A web-based tool for browsing and searching APT repositories. This tool allows y
 - Responsive UI for desktop and mobile devices
 - Docker support for easy deployment
 - GitHub Container Registry integration for automated builds
+
+## Screenshot
+
+![WebAPT-Preview](./.github/WebAPT-Example.jpeg)
 
 ## Requirements
 
